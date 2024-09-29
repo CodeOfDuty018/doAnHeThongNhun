@@ -1,0 +1,24 @@
+#include <Arduino.h>
+#include <SoftwareSerial.h>
+
+const int ledPin = D4;
+SoftwareSerial SerialESP(D2, D1);  // RX, TX pins for ESP8266
+
+void setup() {
+  pinMode(ledPin, OUTPUT);
+  Serial.begin(115200);
+  SerialESP.begin(9600);  // UART baud rate
+}
+
+void loop() {
+  if (SerialESP.available()) {
+    String command = SerialESP.readString();
+
+    if (command == "ON") {
+      digitalWrite(ledPin, HIGH);  // Turn on the LED
+      SerialESP.print("done");     // Send confirmation back to ESP32
+    } else if (command == "OFF") {
+      digitalWrite(ledPin, LOW);   // Turn off the LED
+    }
+  }
+}
