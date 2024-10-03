@@ -1,0 +1,69 @@
+#include <WiFi.h>
+#include <UniversalTelegramBot.h>
+#include <WiFiClientSecure.h>
+
+// Khai báo thông tin kết nối Wi-Fi
+const char* ssid = "Mobifone Cau Xeo";
+const char* password = "22081595";
+
+// Khai báo thông tin bot Telegram
+const char* botToken = "7383028852:AAEeLYrRonIoH02NHHe1beB-eqhH2OLetZ4";  // Telegram bot token
+const char* chat_id = "5594045316";     // Chat ID
+
+// Khai báo UART (Serial) để giao tiếp với ESP8266
+#define RXD2 16  // Pin RX của ESP32
+#define TXD2 17  // Pin TX của ESP32
+
+WiFiClientSecure client;
+UniversalTelegramBot bot(botToken, client);
+
+long lastTimeBotRan;
+int botRequestDelay = 1000;  // Kiểm tra tin nhắn từ Telegram mỗi 1 giây
+
+void setup() {
+  Serial.begin(115200);  // Mở Serial cho debug
+  Serial2.begin(9600, SERIAL_8N1, RXD2, TXD2);  // Serial2 cho giao tiếp với ESP8266
+
+  // Kết nối Wi-Fi
+  WiFi.begin(ssid, password);
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(1000);
+    Serial.println("Đang kết nối tới Wi-Fi...");
+  }
+  Serial.println("Kết nối thành công!");
+
+  client.setInsecure();  // Bỏ qua chứng chỉ bảo mật cho kết nối Telegram
+}
+
+void loop() {
+  // Kiểm tra tin nhắn Telegram mỗi giây
+  if (millis() - lastTimeBotRan > botRequestDelay) {
+    int numNewMessages = bot.getUpdates(bot.last_message_received + 1);
+    while (numNewMessages) {
+      handleNewMessages(numNewMessages);
+      numNewMessages = bot.getUpdates(bot.last_message_received + 1);
+    }
+    lastTimeBotRan = millis();
+  }
+}
+
+// Hàm xử lý tin nhắn mới từ Telegram
+void handleNewMessages(int numNewMessages) {
+  Serial.println("Đã nhận tin nhắn mới");
+
+  for (int i = 0; i < numNewMessages; i++) {
+    String chat_id_received = bot.messages[i].chat_id;
+    String text = bot.messages[i].text;
+    
+    if (chat_id_received == chat_id) {
+      Serial.println("Tin nhắn nhận được: " + text);
+
+      // Gửi tin nhắn qua UART đến ESP8266
+      Serial2.println(text);
+      bot.sendMessage(chat_id_received, "Tin nhắn đã được gửi đến ESP8266: " + text, "");
+    } else {
+      bot.sendMessage(chat_id_received, "Bạn không có quyền gửi tin nhắn này.", "");
+    }
+  }
+}
+
