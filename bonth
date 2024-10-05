@@ -3,12 +3,12 @@
 #include <WiFiClientSecure.h>
 
 // Khai báo thông tin kết nối Wi-Fi
-const char* ssid = "Mobifone Cau Xeo";
-const char* password = "22081595";
+const char* ssid = "";
+const char* password = "";
 
 // Khai báo thông tin bot Telegram
-const char* botToken = "7383028852:AAEeLYrRonIoH02NHHe1beB-eqhH2OLetZ4";  // Telegram bot token
-const char* chat_id = "5594045316";     // Chat ID
+const char* botToken = "";  // Telegram bot token
+const char* chat_id = "";     // Chat ID
 
 // Khai báo UART (Serial) để giao tiếp với ESP8266
 #define RXD2 16  // Pin RX của ESP32
