@@ -1,0 +1,110 @@
+#include <eloquent_esp32cam.h>
+#include <eloquent_esp32cam/motion/detection.h>
+#include <WiFi.h>
+#include <WiFiClientSecure.h>
+#include <HTTPClient.h>
+
+// Thông tin Wi-Fi của bạn
+const char* ssid = "YOUR_SSID";
+const char* password = "YOUR_PASSWORD";
+
+// Thông tin Telegram bot
+String botToken = "YOUR_BOT_TOKEN";  // Bot token từ BotFather
+String chatId = "YOUR_CHAT_ID";      // Chat ID của bạn
+
+using eloq::camera;
+using eloq::motion::detection;
+
+void setup() {
+    delay(3000);
+    Serial.begin(115200);
+    Serial.println("___MOTION DETECTION___");
+
+    // Kết nối Wi-Fi
+    WiFi.begin(ssid, password);
+    while (WiFi.status() != WL_CONNECTED) {
+        delay(1000);
+        Serial.println("Connecting to WiFi...");
+    }
+    Serial.println("WiFi connected");
+
+    // Cấu hình camera
+    camera.pinout.freenove_s3();
+    camera.brownout.disable();
+    camera.resolution.vga();
+    camera.quality.high();
+
+    // Cấu hình phát hiện chuyển động
+    detection.stride(1);
+    detection.threshold(5);
+    detection.ratio(0.2);
+    detection.rate.atMostOnceEvery(5).seconds();
+
+    // Khởi động camera
+    while (!camera.begin().isOk())
+        Serial.println(camera.exception.toString());
+
+    Serial.println("Camera OK");
+    Serial.println("Awaiting for motion...");
+}
+
+void loop() {
+    // Chụp ảnh
+    auto captureResult = camera.capture();
+    if (!captureResult.isOk()) {
+        Serial.println(camera.exception.toString());
+        return;
+    }
+
+    // Phát hiện chuyển động
+    if (!detection.run().isOk()) {
+        Serial.println(detection.exception.toString());
+        return;
+    }
+
+    // Nếu phát hiện chuyển động, gửi ảnh
+    if (detection.triggered()) {
+        Serial.println("Motion detected! Sending photo...");
+
+        // Lấy ảnh từ camera
+        camera_fb_t* fb = esp_camera_fb_get();
+        if (fb != nullptr) {
+            sendPhotoTelegram(fb->buf, fb->len);  // Gửi ảnh qua Telegram
+            esp_camera_fb_return(fb);  // Giải phóng buffer sau khi gửi
+        } else {
+            Serial.println("Camera capture failed");
+        }
+    }
+}
+
+/**
+ * Hàm gửi ảnh qua Telegram
+ */
+void sendPhotoTelegram(uint8_t *image, size_t len) {
+    WiFiClientSecure client;
+    HTTPClient https;
+
+    client.setInsecure();  // Dùng khi không cần xác thực chứng chỉ
+    String url = "https://api.telegram.org/bot" + botToken + "/sendPhoto";
+    https.begin(client, url);
+
+    // Tạo dữ liệu gửi
+    String body = "--Boundary\r\nContent-Disposition: form-data; name=\"chat_id\"\r\n\r\n" + chatId + "\r\n";
+    body += "--Boundary\r\nContent-Disposition: form-data; name=\"photo\"; filename=\"motion.jpg\"\r\nContent-Type: image/jpeg\r\n\r\n";
+    int contentLength = body.length() + len + strlen("\r\n--Boundary--\r\n");
+
+    // Gửi yêu cầu POST
+    https.addHeader("Content-Type", "multipart/form-data; boundary=Boundary");
+    https.addHeader("Content-Length", String(contentLength));
+
+    int httpCode = https.POST((uint8_t *)body.c_str(), body.length());
+    if (httpCode > 0) {
+        Serial.printf("HTTP Response code: %d\n", httpCode);
+        String payload = https.getString();
+        Serial.println(payload);
+    } else {
+        Serial.printf("Error on sending POST: %s\n", https.errorToString(httpCode).c_str());
+    }
+
+    https.end();  // Đóng kết nối
+}
